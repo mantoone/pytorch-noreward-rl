@@ -10,9 +10,8 @@ from torch.autograd import Variable
 
 def normalized_columns_initializer(weights, std=1.0):
     out = torch.randn(weights.size())
-    out *= std / torch.sqrt(out.pow(2).sum(1).expand_as(out))
+    out *= std / torch.sqrt((out**2).sum(1, keepdim=True))
     return out
-
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -33,7 +32,7 @@ def weights_init(m):
 
 
 class ActorCritic(torch.nn.Module):
-    
+
     def __init__(self, num_inputs, action_space):
         super(ActorCritic, self).__init__()
         self.conv1 = nn.Conv2d(num_inputs, 32, 3, stride=2, padding=1)
@@ -76,7 +75,7 @@ class ActorCritic(torch.nn.Module):
         self.inverse_linear2.weight.data = normalized_columns_initializer(
             self.inverse_linear2.weight.data, 1.0)
         self.inverse_linear2.bias.data.fill_(0)
-        
+
         self.forward_linear1.weight.data = normalized_columns_initializer(
             self.forward_linear1.weight.data, 0.01)
         self.forward_linear1.bias.data.fill_(0)
@@ -102,10 +101,13 @@ class ActorCritic(torch.nn.Module):
         self.lstm.bias_ih.data.fill_(0)
         self.lstm.bias_hh.data.fill_(0)
 
+        print('Model self.train()')
         self.train()
+        print('End self.train()')
 
 
     def forward(self, inputs, icm):
+        #print('Model forward')
 
         if icm == False:
             """A3C"""

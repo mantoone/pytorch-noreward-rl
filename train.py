@@ -12,6 +12,8 @@ import env_wrapper
 from model import ActorCritic
 from torch.autograd import Variable
 from torchvision import datasets, transforms
+from collections import deque
+import matplotlib.pyplot as plt
 
 import time
 
@@ -23,15 +25,19 @@ def ensure_shared_grads(model, shared_model):
 
 
 def train(rank, args, shared_model, optimizer=None):
-    
+
     mse_loss = torch.nn.MSELoss()
     nll_loss = torch.nn.NLLLoss()
 
     torch.manual_seed(args.seed + rank)
 
+    print('Train start')
     env = env_wrapper.create_doom(args.record, outdir=args.outdir)
+    print('Doom created')
     num_outputs = env.action_space.n
+    print(env.observation_space, env.action_space)
     model = ActorCritic(env.observation_space.shape[0], env.action_space)
+    print('ActorCritic created')
 
     if optimizer is None:
         optimizer = optim.Adam(shared_model.parameters(), lr=args.lr)
@@ -43,6 +49,10 @@ def train(rank, args, shared_model, optimizer=None):
     done = True
 
     episode_length = 0
+
+    gi = 0
+    Q = deque()
+    reward_since = 0
 
     while True:
         episode_length += 1
@@ -75,7 +85,7 @@ def train(rank, args, shared_model, optimizer=None):
             entropy = -(log_prob * prob).sum(1)
             entropies.append(entropy)
 
-            action = prob.multinomial().data
+            action = prob.multinomial(1).data
             log_prob = log_prob.gather(1, Variable(action))
 
             oh_action = torch.Tensor(1, num_outputs)
@@ -98,12 +108,22 @@ def train(rank, args, shared_model, optimizer=None):
                     a_t
                 ),
                 icm = True
-            )            
+            )
 
             reward_intrinsic = args.eta * ((vec_st1 - forward).pow(2)).sum(1) / 2.
             #reward_intrinsic = args.eta * ((vec_st1 - forward).pow(2)).sum(1).sqrt() / 2.
-            reward_intrinsic = reward_intrinsic.data.numpy()[0][0]
+
+            reward_intrinsic = reward_intrinsic.data.numpy()[0]
             reward += reward_intrinsic
+            reward_since += reward_intrinsic
+            if gi % 100 == 0:
+                env.render()
+                print(gi, reward_intrinsic, reward_since / 100)
+                #Q.append(reward_since / 100)
+                #plt.plot(range(len(list(Q))), list(Q))
+                #plt.show()
+                reward_since = 0
+            gi += 1
 
             if done:
                 episode_length = 0
@@ -147,7 +167,7 @@ def train(rank, args, shared_model, optimizer=None):
 
             policy_loss = policy_loss - \
                 log_probs[i] * Variable(gae) - 0.01 * entropies[i]
-            
+
             cross_entropy = - (actions[i] * torch.log(inverses[i] + 1e-15)).sum(1)
             inverse_loss = inverse_loss + cross_entropy
             forward_err = forwards[i] - vec_st1s[i]
@@ -156,7 +176,7 @@ def train(rank, args, shared_model, optimizer=None):
 
         optimizer.zero_grad()
 
-        ((1-args.beta) * inverse_loss + args.beta * forward_loss).backward(retain_variables=True)
+        ((1-args.beta) * inverse_loss + args.beta * forward_loss).backward(retain_graph=True)
         (args.lmbda * (policy_loss + 0.5 * value_loss)).backward()
 
         #(((1-args.beta) * inverse_loss + args.beta * forward_loss) + args.lmbda * (policy_loss + 0.5 * value_loss)).backward()
@@ -165,3 +185,4 @@ def train(rank, args, shared_model, optimizer=None):
 
         ensure_shared_grads(model, shared_model)
         optimizer.step()
+        #print('Optimizer step')

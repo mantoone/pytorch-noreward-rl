@@ -4,6 +4,7 @@ Source code is heavily based on ikostrikov's A3C (https://github.com/ikostrikov/
 """""""""
 from __future__ import print_function
 
+import time
 import argparse
 import os
 import sys
@@ -60,6 +61,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     torch.manual_seed(args.seed)
 
+    #mp.set_start_method('spawn')
+
     #env = create_atari_env(args.env_name)
     env = env_wrapper.create_doom(args.record, outdir=args.outdir)
     shared_model = ActorCritic(
@@ -74,13 +77,21 @@ if __name__ == '__main__':
 
     processes = []
 
+    rank = 1000
+    print('Train without multiprocessing')
+    #test(rank, args, shared_model)
+    train(rank, args, shared_model, optimizer)
+    print('Training done')
+
     p = mp.Process(target=test, args=(args.num_processes, args, shared_model))
     p.start()
     processes.append(p)
+    time.sleep(0.1)
 
     for rank in range(0, args.num_processes):
         p = mp.Process(target=train, args=(rank, args, shared_model, optimizer))
         p.start()
+        time.sleep(0.1)
         processes.append(p)
     for p in processes:
         p.join()
