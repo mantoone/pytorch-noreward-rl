@@ -14,6 +14,7 @@ from torch.autograd import Variable
 from torchvision import datasets, transforms
 from collections import deque
 import matplotlib.pyplot as plt
+import cv2
 
 import time
 
@@ -24,7 +25,7 @@ def ensure_shared_grads(model, shared_model):
         shared_param._grad = param.grad
 
 
-def train(rank, args, shared_model, optimizer=None):
+def train(rank, args, shared_model, optimizer=None, visualize=False):
 
     mse_loss = torch.nn.MSELoss()
     nll_loss = torch.nn.NLLLoss()
@@ -32,7 +33,7 @@ def train(rank, args, shared_model, optimizer=None):
     torch.manual_seed(args.seed + rank)
 
     print('Train start')
-    env = env_wrapper.create_doom(args.record, outdir=args.outdir)
+    env = env_wrapper.create_atari_env(args.env_name)
     print('Doom created')
     num_outputs = env.action_space.n
     print(env.observation_space, env.action_space)
@@ -44,7 +45,11 @@ def train(rank, args, shared_model, optimizer=None):
 
     model.train()
 
-    state = env.reset()
+    # Hack to get observation to have 4 channels TODO: find better solution
+    for i in range(4):
+        state = env.reset()
+
+    print(state.shape)
     state = torch.from_numpy(state)
     done = True
 
@@ -53,6 +58,7 @@ def train(rank, args, shared_model, optimizer=None):
     gi = 0
     Q = deque()
     reward_since = 0
+    external_reward_since = 0
 
     while True:
         episode_length += 1
@@ -96,6 +102,8 @@ def train(rank, args, shared_model, optimizer=None):
             actions.append(oh_action)
 
             state, reward, done, _ = env.step(action.numpy()[0][0])
+            external_reward = reward
+            np_state = state
             state = torch.from_numpy(state)
 
             done = done or episode_length >= args.max_episode_length
@@ -116,14 +124,19 @@ def train(rank, args, shared_model, optimizer=None):
             reward_intrinsic = reward_intrinsic.data.numpy()[0]
             reward += reward_intrinsic
             reward_since += reward_intrinsic
-            if gi % 100 == 0:
-                env.render()
-                print(gi, reward_intrinsic, reward_since / 100)
-                #Q.append(reward_since / 100)
-                #plt.plot(range(len(list(Q))), list(Q))
-                #plt.show()
-                reward_since = 0
-            gi += 1
+            external_reward_since += external_reward
+            if visualize:
+                if gi % 10 == 0:
+                    #env.render()
+                    #cv2.imshow('Frame', np_state[-1])
+                    #cv2.waitKey(1)
+                    print('Step {}: average intrinsic reward {}, current intrinsic reward {}, external reward {}'.format( gi, reward_since / 100, reward_intrinsic, external_reward_since / 100) )
+                    #Q.append(reward_since / 100)
+                    #plt.plot(range(len(list(Q))), list(Q))
+                    #plt.show()
+                    reward_since = 0
+                    external_reward_since = 0
+                gi += 1
 
             if done:
                 episode_length = 0
@@ -181,7 +194,7 @@ def train(rank, args, shared_model, optimizer=None):
 
         #(((1-args.beta) * inverse_loss + args.beta * forward_loss) + args.lmbda * (policy_loss + 0.5 * value_loss)).backward()
 
-        torch.nn.utils.clip_grad_norm(model.parameters(), 40)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 40)
 
         ensure_shared_grads(model, shared_model)
         optimizer.step()

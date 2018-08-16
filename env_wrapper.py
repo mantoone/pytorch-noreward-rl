@@ -88,10 +88,21 @@ class NoNegativeRewardEnv(gym.RewardWrapper):
         new_reward = self.neg_clip if reward < self.neg_clip else reward
         return new_reward
 
+def create_atari_env(env_name):
+    #env = gym.make('ppaquette/DoomMyWayHome-v0')
+    env = gym.make(env_name)
+
+    fshape = (42, 42)
+
+    env.seed(None)
+    #env = env_wrapper.NoNegativeRewardEnv(env)
+    env = BufferedObsEnv(env, skip=1, shape=fshape)
+    return env
 
 def create_doom(record=False, outdir=None):
     from ppaquette_gym_doom import wrappers
-    env = gym.make('ppaquette/DoomMyWayHome-v0')
+    #env = gym.make('ppaquette/DoomMyWayHome-v0')
+    env = gym.make('MontezumaRevenge-v0')
     modewrapper = wrappers.SetPlayingMode('algo')
     obwrapper = wrappers.SetResolution('160x120')
     acwrapper = wrappers.ToDiscrete('minimal')

@@ -20,12 +20,14 @@ def test(rank, args, shared_model):
     print('Test')
 
     torch.manual_seed(args.seed + rank)
-    env = env_wrapper.create_doom(args.record, outdir=args.outdir)
+    env = env_wrapper.create_atari_env(args.env_name)
 
     model = ActorCritic(env.observation_space.shape[0], env.action_space)
 
     model.eval()
-    state = env.reset()
+    # Hack to get observation to have 4 channels TODO: find better solution
+    for i in range(4):
+        state = env.reset()
     state = torch.from_numpy(state)
     reward_sum = 0
     done = True
@@ -40,25 +42,26 @@ def test(rank, args, shared_model):
     while True:
         episode_length += 1
         # Sync with the shared model
-        if done:
-            model.load_state_dict(shared_model.state_dict())
-            cx = Variable(torch.zeros(1, 256), volatile=True)
-            hx = Variable(torch.zeros(1, 256), volatile=True)
-        else:
-            cx = Variable(cx.data, volatile=True)
-            hx = Variable(hx.data, volatile=True)
+        with torch.no_grad():
+            if done:
+                model.load_state_dict(shared_model.state_dict())
+                cx = Variable(torch.zeros(1, 256))
+                hx = Variable(torch.zeros(1, 256))
+            else:
+                cx = Variable(cx.data)
+                hx = Variable(hx.data)
 
-        value, logit, (hx, cx) = model(
-            (Variable(state.unsqueeze(0), volatile=True), (hx, cx)),
-            icm = False
-        )
+            value, logit, (hx, cx) = model(
+                (Variable(state.unsqueeze(0)), (hx, cx)),
+                icm = False
+            )
 
         prob = F.softmax(logit)
         action = prob.max(1)[1].data.numpy()
 
         #print(action)
         state, reward, done, _ = env.step(action[0])
-        print('test step')
+        #print('test step')
         #env.render()
         state = torch.from_numpy(state)
 

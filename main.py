@@ -21,6 +21,7 @@ from model import ActorCritic
 from train import train
 from test import test
 import my_optim
+import gym
 
 # Based on
 # https://github.com/pytorch/examples/tree/master/mnist_hogwild
@@ -40,8 +41,8 @@ parser.add_argument('--num-steps', type=int, default=20, metavar='NS',
                     help='number of forward steps in A3C (default: 20)')
 parser.add_argument('--max-episode-length', type=int, default=10000, metavar='M',
                     help='maximum length of an episode (default: 10000)')
-parser.add_argument('--env-name', default='PongDeterministic-v3', metavar='ENV',
-                    help='environment to train on (default: PongDeterministic-v3)')
+parser.add_argument('--env-name', default='PongDeterministic-v0', metavar='ENV',
+                    help='environment to train on (default: PongDeterministic-v0)')
 parser.add_argument('--no-shared', default=False, metavar='O',
                     help='use an optimizer without shared momentum.')
 ####################
@@ -61,10 +62,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
     torch.manual_seed(args.seed)
 
-    #mp.set_start_method('spawn')
+    mp.set_start_method('spawn')
 
-    #env = create_atari_env(args.env_name)
-    env = env_wrapper.create_doom(args.record, outdir=args.outdir)
+    env = env_wrapper.create_atari_env(args.env_name)
+    #env = gym.make('MontezumaRevenge-v0')
+    #env = env_wrapper.create_doom(args.record, outdir=args.outdir)
     shared_model = ActorCritic(
         env.observation_space.shape[0], env.action_space)
     shared_model.share_memory()
@@ -78,10 +80,10 @@ if __name__ == '__main__':
     processes = []
 
     rank = 1000
-    print('Train without multiprocessing')
+    #print('Train without multiprocessing')
     #test(rank, args, shared_model)
-    train(rank, args, shared_model, optimizer)
-    print('Training done')
+    #train(rank, args, shared_model, optimizer)
+    #print('Training done')
 
     p = mp.Process(target=test, args=(args.num_processes, args, shared_model))
     p.start()
@@ -89,7 +91,7 @@ if __name__ == '__main__':
     time.sleep(0.1)
 
     for rank in range(0, args.num_processes):
-        p = mp.Process(target=train, args=(rank, args, shared_model, optimizer))
+        p = mp.Process(target=train, args=(rank, args, shared_model, optimizer, rank == 0))
         p.start()
         time.sleep(0.1)
         processes.append(p)
