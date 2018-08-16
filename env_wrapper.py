@@ -89,13 +89,11 @@ class NoNegativeRewardEnv(gym.RewardWrapper):
         return new_reward
 
 def create_atari_env(env_name):
-    #env = gym.make('ppaquette/DoomMyWayHome-v0')
     env = gym.make(env_name)
 
     fshape = (42, 42)
 
     env.seed(None)
-    #env = env_wrapper.NoNegativeRewardEnv(env)
     env = BufferedObsEnv(env, skip=1, shape=fshape)
     return env
 

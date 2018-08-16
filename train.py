@@ -14,7 +14,6 @@ from torch.autograd import Variable
 from torchvision import datasets, transforms
 from collections import deque
 import matplotlib.pyplot as plt
-import cv2
 
 import time
 
@@ -32,13 +31,9 @@ def train(rank, args, shared_model, optimizer=None, visualize=False):
 
     torch.manual_seed(args.seed + rank)
 
-    print('Train start')
     env = env_wrapper.create_atari_env(args.env_name)
-    print('Doom created')
     num_outputs = env.action_space.n
-    print(env.observation_space, env.action_space)
     model = ActorCritic(env.observation_space.shape[0], env.action_space)
-    print('ActorCritic created')
 
     if optimizer is None:
         optimizer = optim.Adam(shared_model.parameters(), lr=args.lr)
@@ -49,7 +44,6 @@ def train(rank, args, shared_model, optimizer=None, visualize=False):
     for i in range(4):
         state = env.reset()
 
-    print(state.shape)
     state = torch.from_numpy(state)
     done = True
 
@@ -128,12 +122,7 @@ def train(rank, args, shared_model, optimizer=None, visualize=False):
             if visualize:
                 if gi % 10 == 0:
                     #env.render()
-                    #cv2.imshow('Frame', np_state[-1])
-                    #cv2.waitKey(1)
                     print('Step {}: average intrinsic reward {}, current intrinsic reward {}, external reward {}'.format( gi, reward_since / 100, reward_intrinsic, external_reward_since / 100) )
-                    #Q.append(reward_since / 100)
-                    #plt.plot(range(len(list(Q))), list(Q))
-                    #plt.show()
                     reward_since = 0
                     external_reward_since = 0
                 gi += 1
@@ -198,4 +187,3 @@ def train(rank, args, shared_model, optimizer=None, visualize=False):
 
         ensure_shared_grads(model, shared_model)
         optimizer.step()
-        #print('Optimizer step')

@@ -101,13 +101,10 @@ class ActorCritic(torch.nn.Module):
         self.lstm.bias_ih.data.fill_(0)
         self.lstm.bias_hh.data.fill_(0)
 
-        print('Model self.train()')
         self.train()
-        print('End self.train()')
 
 
     def forward(self, inputs, icm):
-        #print('Model forward')
 
         if icm == False:
             """A3C"""

@@ -17,8 +17,6 @@ from collections import deque
 
 
 def test(rank, args, shared_model):
-    print('Test')
-
     torch.manual_seed(args.seed + rank)
     env = env_wrapper.create_atari_env(args.env_name)
 
@@ -59,10 +57,7 @@ def test(rank, args, shared_model):
         prob = F.softmax(logit)
         action = prob.max(1)[1].data.numpy()
 
-        #print(action)
         state, reward, done, _ = env.step(action[0])
-        #print('test step')
-        #env.render()
         state = torch.from_numpy(state)
 
         done = done or episode_length >= args.max_episode_length
