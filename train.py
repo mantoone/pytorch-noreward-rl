@@ -14,8 +14,10 @@ from torch.autograd import Variable
 from torchvision import datasets, transforms
 from collections import deque
 import matplotlib.pyplot as plt
+from tensorboardX import SummaryWriter
 
 import time
+import cv2
 
 def ensure_shared_grads(model, shared_model):
     for param, shared_param in zip(model.parameters(), shared_model.parameters()):
@@ -25,9 +27,11 @@ def ensure_shared_grads(model, shared_model):
 
 
 def train(rank, args, shared_model, optimizer=None, visualize=False):
+    writer = SummaryWriter()
 
     mse_loss = torch.nn.MSELoss()
     nll_loss = torch.nn.NLLLoss()
+    ce_loss = torch.nn.CrossEntropyLoss()
 
     torch.manual_seed(args.seed + rank)
 
@@ -53,6 +57,9 @@ def train(rank, args, shared_model, optimizer=None, visualize=False):
     Q = deque()
     reward_since = 0
     external_reward_since = 0
+    lt = time.time()
+    freq = 10
+    n_iter = 0
 
     while True:
         episode_length += 1
@@ -120,11 +127,21 @@ def train(rank, args, shared_model, optimizer=None, visualize=False):
             reward_since += reward_intrinsic
             external_reward_since += external_reward
             if visualize:
-                if gi % 10 == 0:
-                    #env.render()
-                    print('Step {}: average intrinsic reward {}, current intrinsic reward {}, external reward {}'.format( gi, reward_since / 100, reward_intrinsic, external_reward_since / 100) )
+                if gi % freq == 0:
+                    #cv2.imshow('state', np_state[0])
+                    #cv2.waitKey(1)
+                    env.render()
+                    took = time.time() - lt
+                    print('Step {}: average intrinsic reward {}, external reward {}, time since last print {}, steps/s {}'.format(
+                        gi,
+                        reward_since / freq,
+                        external_reward_since / freq,
+                        took,
+                        freq / took
+                    ))
                     reward_since = 0
                     external_reward_since = 0
+                    lt = time.time()
                 gi += 1
 
             if done:
@@ -170,16 +187,34 @@ def train(rank, args, shared_model, optimizer=None, visualize=False):
             policy_loss = policy_loss - \
                 log_probs[i] * Variable(gae) - 0.01 * entropies[i]
 
+            #print(actions[i], inverses[i])
+
+            # Original
             cross_entropy = - (actions[i] * torch.log(inverses[i] + 1e-15)).sum(1)
             inverse_loss = inverse_loss + cross_entropy
+
+            # New
+            #cross_entropy = ce_loss(inverses[i], actions[i].argmax(1))
+            #inverse_loss = inverse_loss + cross_entropy
+
             forward_err = forwards[i] - vec_st1s[i]
             forward_loss = forward_loss + 0.5 * (forward_err.pow(2)).sum(1)
 
 
+
+        writer.add_scalar('train/forward_loss', forward_loss, n_iter)
+        writer.add_scalar('train/inverse_loss', inverse_loss, n_iter)
+        n_iter += 1
+
         optimizer.zero_grad()
 
-        ((1-args.beta) * inverse_loss + args.beta * forward_loss).backward(retain_graph=True)
-        (args.lmbda * (policy_loss + 0.5 * value_loss)).backward()
+        # Original
+        #((1-args.beta) * inverse_loss + args.beta * forward_loss).backward(retain_graph=True)
+        #(args.lmbda * (policy_loss + 0.5 * value_loss)).backward()
+
+        # New
+        ((1-args.beta) * inverse_loss + args.beta * forward_loss + \
+         args.lmbda * (policy_loss + 0.5 * value_loss)).backward()
 
         #(((1-args.beta) * inverse_loss + args.beta * forward_loss) + args.lmbda * (policy_loss + 0.5 * value_loss)).backward()
 

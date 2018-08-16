@@ -8,7 +8,6 @@ import time
 import argparse
 import os
 import sys
-import cv2
 
 import torch
 import torch.optim as optim
@@ -62,7 +61,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     torch.manual_seed(args.seed)
 
-    mp.set_start_method('spawn')
+    #mp.set_start_method('spawn')
 
     env = env_wrapper.create_atari_env(args.env_name)
     #env = gym.make('MontezumaRevenge-v0')
@@ -79,10 +78,10 @@ if __name__ == '__main__':
 
     processes = []
 
-    rank = 1000
+    rank = 0
     #print('Train without multiprocessing')
     #test(rank, args, shared_model)
-    #train(rank, args, shared_model, optimizer)
+    train(rank, args, shared_model, optimizer, True)
     #print('Training done')
 
     p = mp.Process(target=test, args=(args.num_processes, args, shared_model))
